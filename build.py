@@ -74,18 +74,36 @@ def parse_post(filepath):
 
 def build():
     # Setup output directory
-    if os.path.exists(OUTPUT_DIR):
-        shutil.rmtree(OUTPUT_DIR)
-    os.makedirs(OUTPUT_DIR)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
     
-    # Copy static assets
+    # Sync static assets (only if newer)
     if os.path.exists(STATIC_DIR):
-        shutil.copytree(STATIC_DIR, os.path.join(OUTPUT_DIR, 'static'))
+        dest_static = os.path.join(OUTPUT_DIR, 'static')
+        if not os.path.exists(dest_static):
+            os.makedirs(dest_static)
+        for root, dirs, files in os.walk(STATIC_DIR):
+            rel_path = os.path.relpath(root, STATIC_DIR)
+            dest_root = os.path.join(dest_static, rel_path)
+            if not os.path.exists(dest_root):
+                os.makedirs(dest_root)
+            for file in files:
+                src_file = os.path.join(root, file)
+                dest_file = os.path.join(dest_root, file)
+                if not os.path.exists(dest_file) or os.stat(src_file).st_mtime > os.stat(dest_file).st_mtime:
+                    shutil.copy2(src_file, dest_file)
 
     # Setup Jinja2
     env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
     post_template = env.get_template('post.html')
     index_template = env.get_template('index.html')
+
+    # Check global dependencies (templates + build script)
+    global_mtime = os.stat(__file__).st_mtime
+    for t_name in env.list_templates():
+        t_path = os.path.join(TEMPLATE_DIR, t_name)
+        if os.path.exists(t_path):
+            global_mtime = max(global_mtime, os.stat(t_path).st_mtime)
 
     posts_by_date = {}
     build_time = datetime.now().strftime('%Y/%m/%d %H:%M:%S EST')
@@ -95,6 +113,7 @@ def build():
         
         for file in files:
             filepath = os.path.join(CONTENT_DIR, file)
+            # Optimization: We could read frontmatter only first, but files are small.
             post = parse_post(filepath)
             date = post['metadata'].get('date')
             
@@ -103,15 +122,15 @@ def build():
                     'title': date,
                     'date': date,
                     'entries': [],
-                    'url': f"{date}.html"
+                    'url': f"{date}.html",
+                    'max_mtime': 0
                 }
             
-            # Determine sort key (first timestamp)
-            # Regex to find [[YYYY/MM/DD HH:MM:SS ...]]
-            # We look in the original raw content (which is not returned by parse_post, but we can re-read or modify parse_post)
-            # Actually parse_post processes content into HTML. We can try to find it in HTML or better, modify parse_post to return raw body or extraction.
-            # But let's just grep the file again or use a simple heuristic on the HTML or filename.
-            # Reading the file again is cheap enough for now.
+            # Update max_mtime for this date group
+            file_mtime = os.stat(filepath).st_mtime
+            posts_by_date[date]['max_mtime'] = max(posts_by_date[date]['max_mtime'], file_mtime)
+
+            # Determine sort key
             with open(filepath, 'r') as f:
                 raw_content = f.read()
             
@@ -119,9 +138,6 @@ def build():
             if ts_match:
                 sort_key = ts_match.group(1)
             else:
-                # Fallback to a high string if not found, or low? 
-                # If it's a tech note without timestamp, it might be an issue.
-                # Use filename as fallback
                 sort_key = "9999/99/99 99:99:99" 
 
             is_tech = file.endswith('-tech.md')
@@ -137,9 +153,13 @@ def build():
     # Render pages and prepare index
     sorted_dates = sorted(posts_by_date.keys(), reverse=True)
     index_posts = []
+    
+    generated_files = set()
 
     for date in sorted_dates:
         group = posts_by_date[date]
+        output_path = os.path.join(OUTPUT_DIR, group['url'])
+        generated_files.add(group['url'])
         
         # Sort entries: Tech last, then by timestamp
         group['entries'].sort(key=lambda x: (x['is_tech'], x['sort_key'], x['filename']))
@@ -154,21 +174,41 @@ def build():
             'image': first_image
         })
         
-        # Render daily page
-        output_html = post_template.render(
-            title=group['title'],
-            date=group['date'],
-            entries=group['entries'],
-            build_time=build_time
-        )
+        # Incremental check
+        needs_rebuild = True
+        if os.path.exists(output_path):
+            output_mtime = os.stat(output_path).st_mtime
+            # If output is newer than both global deps and source content -> skip
+            if output_mtime > global_mtime and output_mtime > group['max_mtime']:
+                needs_rebuild = False
         
-        with open(os.path.join(OUTPUT_DIR, group['url']), 'w') as f:
-            f.write(output_html)
+        if needs_rebuild:
+            # Render daily page
+            output_html = post_template.render(
+                title=group['title'],
+                date=group['date'],
+                entries=group['entries'],
+                build_time=build_time
+            )
+            
+            with open(output_path, 'w') as f:
+                f.write(output_html)
+            print(f"Built {group['url']}")
+        else:
+            # print(f"Skipped {group['url']} (up to date)")
+            pass
 
-    # Render index
+    # Render index (Always rebuild index for now to ensure list is correct)
     index_html = index_template.render(posts=index_posts, build_time=build_time)
     with open(os.path.join(OUTPUT_DIR, 'index.html'), 'w') as f:
         f.write(index_html)
+    generated_files.add('index.html')
+
+    # Cleanup stale files
+    for f in os.listdir(OUTPUT_DIR):
+        if f.endswith('.html') and f not in generated_files:
+            print(f"Removing stale file: {f}")
+            os.remove(os.path.join(OUTPUT_DIR, f))
         
     print(f"Site built in {OUTPUT_DIR}/")
 
