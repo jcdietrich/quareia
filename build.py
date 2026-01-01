@@ -92,7 +92,8 @@ def build():
     
     if os.path.exists(CONTENT_DIR):
         files = [f for f in os.listdir(CONTENT_DIR) if f.endswith('.md')]
-        files.sort() # Sort by filename to maintain some order within a date
+        # Sort by filename, but ensure '-tech.md' files come last
+        files.sort(key=lambda x: (x.endswith('-tech.md'), x))
         
         for file in files:
             filepath = os.path.join(CONTENT_DIR, file)
