@@ -172,11 +172,11 @@ def get_astro_data(date_str, lat=DEFAULT_LAT, lon=DEFAULT_LON):
         phase_str = f"{phase_illum:.1f}%"
         
         return f"""
-* Sunrise: {sun_rise or "N/A"}
-* Sunset: {sun_set or "N/A"}
-* Moonrise: {moon_rise or "N/A"}
-* Moonset: {moon_set or "N/A"}
-* Moon phase: {phase_str}
+  * Sunrise: {sun_rise or "N/A"}
+  * Sunset: {sun_set or "N/A"}
+  * Moonrise: {moon_rise or "N/A"}
+  * Moonset: {moon_set or "N/A"}
+  * Moon phase: {phase_str}
 """
     except Exception as e:
         print(f"Error calculating astro data: {e}")
@@ -303,7 +303,7 @@ def process_image(image_path):
                 y, m, d, H, M, S = map(int, dt_match.groups())
                 dt = datetime.datetime(y, m, d, H, M, S)
                 temp, condition = get_weather_data(dt, lat, lon)
-                weather_block = f"* Location: {loc_name}\n* Temperature: {temp}\n* Weather Condition: {condition}\n"
+                weather_block = f"  * Location: {loc_name}\n  * Temperature: {temp}\n  * Weather Condition: {condition}\n"
 
             astro_data = get_astro_data(date_str, lat, lon).strip()
             
@@ -326,7 +326,7 @@ def process_image(image_path):
             # Combine list items
             list_content = meta_data
             if bullets:
-                list_content += "\n" + "\n".join(bullets)
+                list_content += "\n" + "\n".join("  " + b for b in bullets)
             
             # Ensure blank line between timestamp and list
             final_section = f"{ts_full}\n\n{list_content}"
