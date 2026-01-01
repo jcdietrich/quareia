@@ -151,7 +151,7 @@ def process_image(image_path):
         response = client.models.generate_content(
             model='gemini-2.5-flash-lite',
             contents=[
-                "Transcribe the handwritten text in this image exactly as written. Do not add any conversational text. However, for any text enclosed in double square brackets (timestamps), format it strictly as [[YYYY/MM/DD HH:MM:SS (EST|EDT)]], even if the handwritten version lacks punctuation or spaces (e.g., convert [[20260101074300EST]] to [[2026/01/01 07:43:00 EST]]).", 
+                "Transcribe the handwritten text in this image. This is a magickal journal entry. Rules: 1. Transcribe EXACTLY as written, including idiosyncratic spellings like 'candel', 'magick', 'sunrises'. 2. Format timestamps in double brackets as [[YYYY/MM/DD HH:MM:SS (EST|EDT)]]. 3. Do not add any conversational filler.", 
                 img
             ]
         )
