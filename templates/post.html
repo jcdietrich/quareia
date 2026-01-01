@@ -7,18 +7,22 @@
       <h2 title="created on {{ date|replace('-', '/') }}">{{ title }}</h2>
         <p class="post-date">{{ date }}</p>
         
-        {% if images %}
-        <div class="handwriting-images">
-            {% for image in images %}
-                <div class="handwriting-image">
-                    <img src="{{ image }}" alt="Handwritten note">
-                </div>
-            {% endfor %}
-        </div>
-        {% endif %}
+        {% for entry in entries %}
+            {% if not loop.first %}
+                <hr/>
+            {% endif %}
 
-        <div class="content">
-            {{ content|safe }}
-        </div>
+            {% if entry.image %}
+            <div class="handwriting-images">
+                <div class="handwriting-image">
+                    <img src="{{ entry.image }}" alt="Handwritten note">
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="content">
+                {{ entry.content|safe }}
+            </div>
+        {% endfor %}
     </article>
 {% endblock %}

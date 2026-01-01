@@ -92,8 +92,6 @@ def build():
     
     if os.path.exists(CONTENT_DIR):
         files = [f for f in os.listdir(CONTENT_DIR) if f.endswith('.md')]
-        # Sort by filename, but ensure '-tech.md' files come last
-        files.sort(key=lambda x: (x.endswith('-tech.md'), x))
         
         for file in files:
             filepath = os.path.join(CONTENT_DIR, file)
@@ -104,14 +102,37 @@ def build():
                 posts_by_date[date] = {
                     'title': date,
                     'date': date,
-                    'contents': [],
-                    'images': [],
+                    'entries': [],
                     'url': f"{date}.html"
                 }
             
-            posts_by_date[date]['contents'].append(post['content'])
-            if post['metadata'].get('image'):
-                posts_by_date[date]['images'].append(post['metadata'].get('image'))
+            # Determine sort key (first timestamp)
+            # Regex to find [[YYYY/MM/DD HH:MM:SS ...]]
+            # We look in the original raw content (which is not returned by parse_post, but we can re-read or modify parse_post)
+            # Actually parse_post processes content into HTML. We can try to find it in HTML or better, modify parse_post to return raw body or extraction.
+            # But let's just grep the file again or use a simple heuristic on the HTML or filename.
+            # Reading the file again is cheap enough for now.
+            with open(filepath, 'r') as f:
+                raw_content = f.read()
+            
+            ts_match = re.search(r'\[\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})', raw_content)
+            if ts_match:
+                sort_key = ts_match.group(1)
+            else:
+                # Fallback to a high string if not found, or low? 
+                # If it's a tech note without timestamp, it might be an issue.
+                # Use filename as fallback
+                sort_key = "9999/99/99 99:99:99" 
+
+            is_tech = file.endswith('-tech.md')
+            
+            posts_by_date[date]['entries'].append({
+                'content': post['content'],
+                'image': post['metadata'].get('image'),
+                'sort_key': sort_key,
+                'is_tech': is_tech,
+                'filename': file
+            })
 
     # Render pages and prepare index
     sorted_dates = sorted(posts_by_date.keys(), reverse=True)
@@ -120,26 +141,25 @@ def build():
     for date in sorted_dates:
         group = posts_by_date[date]
         
-        # Join contents with <hr/>
-        # Note: build.py already adds <hr/> between timestamps in parse_post.
-        # Here we add it between separate files for the same day.
-        combined_content = "\n\n<hr/>\n\n".join(group['contents'])
+        # Sort entries: Tech last, then by timestamp
+        group['entries'].sort(key=lambda x: (x['is_tech'], x['sort_key'], x['filename']))
         
-        # For the index, we'll use the first image found for that day if any
+        # Collect images for index (first one)
+        first_image = next((e['image'] for e in group['entries'] if e['image']), '')
+        
         index_posts.append({
             'title': group['title'],
             'date': group['date'],
             'url': group['url'],
-            'image': group['images'][0] if group['images'] else ''
+            'image': first_image
         })
         
         # Render daily page
         output_html = post_template.render(
             title=group['title'],
             date=group['date'],
-            content=combined_content,
-            build_time=build_time,
-            images=group['images']
+            entries=group['entries'],
+            build_time=build_time
         )
         
         with open(os.path.join(OUTPUT_DIR, group['url']), 'w') as f:
