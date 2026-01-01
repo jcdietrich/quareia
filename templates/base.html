@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}My Handwritten Blog{% endblock %}</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        header { margin-bottom: 40px; border-bottom: 1px solid #ccc; padding-bottom: 20px; }
+        nav a { margin-right: 15px; text-decoration: none; color: #333; font-weight: bold; }
+        h1, h2, h3 { color: #222; }
+        img { max-width: 100%; height: auto; display: block; margin: 20px 0; border: 1px solid #ddd; }
+        .post-date { color: #666; font-size: 0.9em; }
+        .handwriting-transcription { background: #f9f9f9; padding: 15px; border-left: 4px solid #333; font-family: serif; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1><a href="index.html" style="text-decoration: none; color: inherit;">My Handwritten Blog</a></h1>
+        <nav>
+            <a href="index.html">Home</a>
+        </nav>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <footer>
+        <p>&copy; 2026 My Handwritten Blog</p>
+    </footer>
+</body>
+</html>

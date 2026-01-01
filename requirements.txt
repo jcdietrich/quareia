@@ -1,0 +1,6 @@
+markdown
+jinja2
+easyocr
+# easyocr dependencies usually include torch/torchvision, but explicit is good if needed.
+# For now, let's stick to the high-level ones.
+Pillow

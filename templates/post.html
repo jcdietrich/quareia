@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - My Handwritten Blog{% endblock %}
+
+{% block content %}
+    <article>
+        <h2>{{ title }}</h2>
+        <p class="post-date">{{ date }}</p>
+        
+        {% if image %}
+        <div class="handwriting-image">
+            <img src="{{ image }}" alt="Handwritten note">
+        </div>
+        {% endif %}
+
+        <div class="content">
+            {{ content|safe }}
+        </div>
+    </article>
+{% endblock %}
