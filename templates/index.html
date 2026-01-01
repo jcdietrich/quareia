@@ -6,8 +6,8 @@
     <h2>Recent Posts</h2>
     {% for post in posts %}
         <article>
-            <h3><a href="{{ post.url }}">{{ post.title }}</a></h3>
-            <p class="post-date" display="hidden">{{ post.date }}</p>
+            <h3><a href="{{ post.url }}" title="created on {{ post.date|replace('-', '/') }}">{{ post.title }}</a></h3>
+            <p class="post-date">{{ post.date }}</p>
             {% if post.image %}
                 <img src="{{ post.image }}" alt="Handwritten note preview" style="max-height: 200px; width: auto;">
             {% endif %}

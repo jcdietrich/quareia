@@ -4,8 +4,8 @@
 
 {% block content %}
     <article>
-      <h2>{{ title }}</h2>
-        <p class="post-date" display="none">{{ date }}</p>
+      <h2 title="created on {{ date|replace('-', '/') }}">{{ title }}</h2>
+        <p class="post-date">{{ date }}</p>
         
         {% if images %}
         <div class="handwriting-images">
