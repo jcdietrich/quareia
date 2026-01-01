@@ -36,7 +36,7 @@ def parse_post(filepath):
                     key, value = line.split(':', 1)
                     frontmatter[key.strip()] = value.strip()
 
-    html_content = markdown.markdown(body)
+    html_content = markdown.markdown(body, extensions=['extra'])
     
     # Infer date/title if missing
     filename = os.path.basename(filepath)
@@ -75,6 +75,8 @@ def build():
     posts = []
     
     # Process posts
+    build_time = datetime.now().strftime('%Y/%m/%d %H:%M:%S EST')
+    
     if os.path.exists(CONTENT_DIR):
         files = [f for f in os.listdir(CONTENT_DIR) if f.endswith('.md')]
         files.sort(reverse=True) # Simple sort by filename (usually date) 
@@ -95,14 +97,15 @@ def build():
                 title=post['metadata'].get('title'),
                 date=post['metadata'].get('date'),
                 image=post['metadata'].get('image'),
-                content=post['content']
+                content=post['content'],
+                build_time=build_time
             )
             
             with open(os.path.join(OUTPUT_DIR, post['url']), 'w') as f:
                 f.write(output_html)
 
     # Render index
-    index_html = index_template.render(posts=posts)
+    index_html = index_template.render(posts=posts, build_time=build_time)
     with open(os.path.join(OUTPUT_DIR, 'index.html'), 'w') as f:
         f.write(index_html)
         
