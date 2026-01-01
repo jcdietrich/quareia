@@ -246,12 +246,9 @@ def process_image(image_path):
 
     markdown_content = f"""
 ---
-title: Note from {today}
 date: {today}
 image: {img_url}
 ---
-
-### Transcription
 
 {final_body}
 

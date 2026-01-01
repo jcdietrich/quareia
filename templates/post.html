@@ -7,9 +7,13 @@
         <h2>{{ title }}</h2>
         <p class="post-date">{{ date }}</p>
         
-        {% if image %}
-        <div class="handwriting-image">
-            <img src="{{ image }}" alt="Handwritten note">
+        {% if images %}
+        <div class="handwriting-images">
+            {% for image in images %}
+                <div class="handwriting-image">
+                    <img src="{{ image }}" alt="Handwritten note">
+                </div>
+            {% endfor %}
         </div>
         {% endif %}
 
