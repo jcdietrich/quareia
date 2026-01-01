@@ -37,17 +37,17 @@ def parse_post(filepath):
                     frontmatter[key.strip()] = value.strip()
 
     # Add <hr/> before second and subsequent timestamps
-    timestamp_pattern = r'(\[\[\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} [A-Z]{3}\]\])'
+    timestamp_pattern = r'(\[\[\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \(?[A-Z]{3}\)?\]\])'
     parts = re.split(timestamp_pattern, body)
     if len(parts) > 3:
         # parts[0] is text before 1st timestamp
         # parts[1] is 1st timestamp
         # parts[2] is text after 1st timestamp
-        new_body = parts[0] + parts[1] + parts[2]
+        new_body = parts[0] + parts[1] + "\n\n" + parts[2].lstrip('\n')
         for i in range(3, len(parts), 2):
             # parts[i] is the i-th timestamp
             # parts[i+1] is text after it
-            new_body += "\n\n---\n\n" + parts[i] + parts[i+1]
+            new_body += "\n\n---\n\n" + parts[i] + "\n\n" + parts[i+1].lstrip('\n')
         body = new_body
 
     html_content = markdown.markdown(body, extensions=['extra'])

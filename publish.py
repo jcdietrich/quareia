@@ -323,11 +323,14 @@ def process_image(image_path):
                 elif clean:
                     remainder.append(line)
             
-            res = [ts_full, meta_data]
+            # Combine list items
+            list_content = meta_data
             if bullets:
-                res.append("\n".join(bullets))
+                list_content += "\n" + "\n".join(bullets)
             
-            final_section = "\n".join(res)
+            # Ensure blank line between timestamp and list
+            final_section = f"{ts_full}\n\n{list_content}"
+            
             if remainder:
                 final_section += "\n\n" + "\n".join(remainder)
                 
