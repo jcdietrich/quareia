@@ -198,10 +198,35 @@ def build():
             # print(f"Skipped {group['url']} (up to date)")
             pass
 
-    # Render index (Always rebuild index for now to ensure list is correct)
+    # Render index (Conditionally write if content changed)
     index_html = index_template.render(posts=index_posts, build_time=build_time)
-    with open(os.path.join(OUTPUT_DIR, 'index.html'), 'w') as f:
-        f.write(index_html)
+    index_path = os.path.join(OUTPUT_DIR, 'index.html')
+    
+    write_index = True
+    if os.path.exists(index_path):
+        with open(index_path, 'r') as f:
+            current_index_html = f.read()
+        
+        # Normalize: Remove the dynamic timestamp for comparison
+        # Pattern: updated last: YYYY/MM/DD HH:MM:SS EST
+        # We can be aggressive or specific. Specific is safer.
+        # The build_time format is '%Y/%m/%d %H:%M:%S EST'
+        # Regex: updated last: \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} EST
+        
+        time_pattern = r'updated last: \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} EST'
+        
+        norm_new = re.sub(time_pattern, '', index_html)
+        norm_old = re.sub(time_pattern, '', current_index_html)
+        
+        if norm_new == norm_old:
+            write_index = False
+            # print("Skipped index.html (content up to date)")
+
+    if write_index:
+        with open(index_path, 'w') as f:
+            f.write(index_html)
+        print("Built index.html")
+        
     generated_files.add('index.html')
 
     # Cleanup stale files
