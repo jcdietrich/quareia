@@ -223,7 +223,7 @@ def process_image(image_path):
         response = client.models.generate_content(
             model='gemini-2.5-flash-lite',
             contents=[
-                "Transcribe the handwritten text in this image. This is a magickal journal entry. Rules: 1. Transcribe EXACTLY as written, including idiosyncratic spellings like 'candel', 'magick', 'sunrises'. 2. Format timestamps in double brackets as [[YYYY/MM/DD HH:MM:SS (EST|EDT)]]. 3. Do not add any conversational filler.", 
+                "Transcribe the handwritten text in this image. This is a magickal journal entry. Rules: 1. Transcribe EXACTLY as written, including idiosyncratic spellings like 'candel', 'magick', 'sunrises'. 2. Format timestamps in double brackets as [[YYYY/MM/DD HH:MM:SS EST]] or [[YYYY/MM/DD HH:MM:SS EDT]]. Do NOT use parentheses around the timezone. Pay close attention to the time digits. 3. Do not add any conversational filler.", 
                 img
             ]
         )
