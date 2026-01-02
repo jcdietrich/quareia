@@ -11,8 +11,19 @@ CONTENT_DIR = 'content/posts'
 OUTPUT_DIR = 'docs'
 TEMPLATE_DIR = 'templates'
 STATIC_DIR = 'static'
+LOOKUP_FILE = 'lesson_lookups.txt'
 
-def parse_post(filepath):
+def load_lookups():
+    lookups = {}
+    if os.path.exists(LOOKUP_FILE):
+        with open(LOOKUP_FILE, 'r') as f:
+            for line in f:
+                parts = line.strip().split(maxsplit=1)
+                if len(parts) == 2:
+                    lookups[parts[0]] = parts[1]
+    return lookups
+
+def parse_post(filepath, lookups=None):
     with open(filepath, 'r') as f:
         content = f.read()
 
@@ -37,7 +48,7 @@ def parse_post(filepath):
                     frontmatter[key.strip()] = value.strip()
 
     # Add <hr/> before second and subsequent timestamps
-    timestamp_pattern = r'(\[\[\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \(?[A-Z]{3}\)?\]\])'
+    timestamp_pattern = r'(\[\[\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \(?A-Z\)?\]\])'
     parts = re.split(timestamp_pattern, body)
     if len(parts) > 3:
         # parts[0] is text before 1st timestamp
@@ -49,6 +60,20 @@ def parse_post(filepath):
             # parts[i+1] is text after it
             new_body += "\n\n---\n\n" + parts[i] + "\n\n" + parts[i+1].lstrip('\n')
         body = new_body
+
+    # Process bullet point links
+    if lookups:
+        # Match bullet points starting with 'module' (case insensitive) and ending with a number
+        pattern = re.compile(r'^(\s*[-*+]\s+)([Mm]odule\b.*?(\d+(?:\.\d+)?))\s*$', re.MULTILINE)
+        def replace_link(match):
+            prefix = match.group(1)
+            content = match.group(2)
+            number = match.group(3)
+            if number in lookups:
+                return f"{prefix}[{content}]({lookups[number]})"
+            print(f"Warning: No lookup found for module {number} in {filepath}")
+            return match.group(0)
+        body = pattern.sub(replace_link, body)
 
     html_content = markdown.markdown(body, extensions=['extra'])
     
@@ -107,14 +132,19 @@ def build():
 
     posts_by_date = {}
     build_time = datetime.now().strftime('%Y/%m/%d %H:%M:%S EST')
+    lookups = load_lookups()
     
+    # Add lookup file to global_mtime
+    if os.path.exists(LOOKUP_FILE):
+        global_mtime = max(global_mtime, os.stat(LOOKUP_FILE).st_mtime)
+
     if os.path.exists(CONTENT_DIR):
         files = [f for f in os.listdir(CONTENT_DIR) if f.endswith('.md')]
         
         for file in files:
             filepath = os.path.join(CONTENT_DIR, file)
             # Optimization: We could read frontmatter only first, but files are small.
-            post = parse_post(filepath)
+            post = parse_post(filepath, lookups=lookups)
             date = post['metadata'].get('date')
             
             if date not in posts_by_date:
