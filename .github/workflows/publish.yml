@@ -84,7 +84,7 @@ jobs:
         
         # Check if there are changes to commit
         if [ -n "$(git status --porcelain)" ]; then
-            git add content/posts/ static/images/ docs/ upload/
+            git add -A
             git commit -m "Auto-publish: Processed uploaded images [skip ci]"
             git push
         else
