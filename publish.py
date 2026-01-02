@@ -228,11 +228,32 @@ def process_image(image_path):
             ]
         )
         transcribed_text = response.text.strip()
+        
+        # 2.1 Perform Spell Check with Gemini
+        if not transcribed_text.startswith("OCR Failed:"):
+            print("Performing spell check...")
+            try:
+                spell_check_prompt = (
+                    "You are a spell checker for a transcription of a handwritten journal. "
+                    "Your goal is to correct any clear spelling errors (like typos or missing letters) while preserving the original context. "
+                    "If a word is spelled correctly, or if it is an intentional variant common in magickal journals (like 'magick'), leave it as is. "
+                    "Provide the corrected text directly. Do NOT use any special notation like {{OriginalWord}} to highlight changes. "
+                    "Preserve all formatting, including double brackets for timestamps [[YYYY/MM/DD HH:MM:SS TZ]] and any bullet points. "
+                    "Do not add any conversational filler. Only output the corrected text."
+                )
+                
+                spell_check_response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[spell_check_prompt, transcribed_text]
+                )
+                transcribed_text = spell_check_response.text.strip()
+            except Exception as e:
+                print(f"Error during spell check: {e}")
     except Exception as e:
         print(f"Error during OCR: {e}")
         transcribed_text = f"OCR Failed: {e}"
     
-    print("Transcription complete.")
+    print("Transcription (and spell check) complete.")
     print("-" * 20)
     print(transcribed_text)
     print("-" * 20)
@@ -242,8 +263,8 @@ def process_image(image_path):
     processed_blocks = []
     current_block = []
     
-    # Regex to find [[YYYY/MM/DD ...]]
-    ts_pattern = re.compile(r'\[\[(\d{4}/\d{2}/\d{2})')
+    # Regex to find [[YYYY/MM/DD ...]] - allowing optional leading bullet/space
+    ts_pattern = re.compile(r'^[*•-]?\s*\[\[(\d{4}/\d{2}/\d{2})')
 
     def flush_block(block_lines):
         if not block_lines:
@@ -251,14 +272,15 @@ def process_image(image_path):
         
         # Split first line into [[Timestamp]] and trailing text
         first_line = block_lines[0].strip()
-        ts_split_pattern = re.compile(r'(\[\[\d{4}/\d{2}/\d{2}.*?\]\])(.*)')
+        # Pattern to capture optional bullet, the timestamp, and then trailing text
+        ts_split_pattern = re.compile(r'^([*•-]?\s*)(\[\[\d{4}/\d{2}/\d{2}.*?\]\])(.*)')
         match = ts_split_pattern.match(first_line)
         
         if match:
-            ts_full = match.group(1)
+            ts_full = match.group(2)
             date_captured = re.search(r'(\d{4}/\d{2}/\d{2})', ts_full).group(1)
             date_str = date_captured.replace('/', '-')
-            trailing_text = match.group(2).strip()
+            trailing_text = match.group(3).strip()
             
             # Defaults
             lat = DEFAULT_LAT
@@ -268,31 +290,28 @@ def process_image(image_path):
             # Scan for override
             lines_to_keep = []
             
+            def is_location_line(text):
+                return text.strip().startswith(('* Location:', '- Location:', '• Location:'))
+
             # Check trailing text first (rarely has location but possible)
-            if trailing_text and trailing_text.startswith('* Location:'):
+            if trailing_text and is_location_line(trailing_text):
                  loc_val = trailing_text.split(':', 1)[1].strip()
                  if loc_val:
                      loc_name = loc_val
                      new_coords = get_coordinates_from_name(loc_name)
                      if new_coords:
                          lat, lon = new_coords
-                 # Consume trailing text if it was just location? 
-                 # Maybe dangerous if there is other text. 
-                 # But usually bullet points are on new lines.
-                 # Let's assume user puts bullets on new lines.
                  trailing_text = "" 
 
             # Check rest of lines
             for line in block_lines[1:]:
-                clean = line.strip()
-                if clean.startswith('* Location:'):
-                    loc_val = clean.split(':', 1)[1].strip()
+                if is_location_line(line):
+                    loc_val = line.strip().split(':', 1)[1].strip()
                     if loc_val:
                         loc_name = loc_val
                         new_coords = get_coordinates_from_name(loc_name)
                         if new_coords:
                             lat, lon = new_coords
-                    # Don't add this line to lines_to_keep
                 else:
                     lines_to_keep.append(line)
 
@@ -313,23 +332,31 @@ def process_image(image_path):
             bullets = []
             remainder = []
             
+            def is_bullet(text):
+                t = text.strip()
+                return t.startswith(('*', '-', '•'))
+
             if trailing_text:
-                remainder.append(trailing_text)
+                if is_bullet(trailing_text):
+                    bullets.append(trailing_text.strip())
+                else:
+                    remainder.append(trailing_text)
                 
             for line in lines_to_keep:
-                clean = line.strip()
-                if clean.startswith('*'):
-                    bullets.append(clean)
-                elif clean:
+                if is_bullet(line):
+                    bullets.append(line.strip())
+                elif line.strip():
                     remainder.append(line)
             
             # Combine list items
             list_content = meta_data
             if bullets:
-                list_content += "\n" + "\n".join("  " + b for b in bullets)
+                if list_content and not list_content.endswith('\n'):
+                    list_content += "\n"
+                list_content += "\n".join("  " + b for b in bullets)
             
             # Ensure blank line between timestamp and list
-            final_section = f"{ts_full}\n\n{list_content}"
+            final_section = f"{ts_full}\n\n{list_content.strip()}"
             
             if remainder:
                 final_section += "\n\n" + "\n".join(remainder)
