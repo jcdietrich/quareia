@@ -75,6 +75,10 @@ def parse_post(filepath, lookups=None):
             return match.group(0)
         body = pattern.sub(replace_link, body)
 
+    # Ensure empty line after bullet points if followed by text
+    # This prevents the next line from being swallowed into the list item
+    body = re.sub(r'(^(\s*[-*+]\s+|\s{2,}).*)\n(?=[^ \t\n\-\*\+])', r'\1\n\n', body, flags=re.MULTILINE)
+
     html_content = markdown.markdown(body, extensions=['extra'])
     
     # Infer date/title if missing
