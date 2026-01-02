@@ -4,7 +4,7 @@ import shutil
 import markdown
 import re
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from jinja2 import Environment, FileSystemLoader
 
 # Configuration
@@ -198,8 +198,8 @@ def write_if_changed(path, content, force=False):
         with open(path, 'r') as f:
             current_content = f.read()
         
-        # Normalize: Remove the dynamic timestamp for comparison
-        time_pattern = r'updated last: \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} EST'
+        # Normalize: Remove the dynamic timestamp for comparison (support EST and UTC)
+        time_pattern = r'updated last: \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} (EST|UTC)'
         
         norm_new = re.sub(time_pattern, '', content)
         norm_old = re.sub(time_pattern, '', current_content)
@@ -252,7 +252,7 @@ def build(force=False):
     posts_by_date = {}
     all_tags = {}  # { 'slug': { 'name': 'Name', 'posts': [] } }
     
-    build_time = datetime.now().strftime('%Y/%m/%d %H:%M:%S EST')
+    build_time = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S UTC')
     lookups = load_lookups()
     
     # Add lookup file to global_mtime
