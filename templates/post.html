@@ -8,10 +8,6 @@
         <p class="post-date">{{ date }}</p>
         
         {% for entry in entries %}
-            {% if not loop.first %}
-                <hr/>
-            {% endif %}
-
             {% if entry.image %}
             <div class="handwriting-images">
                 <div class="handwriting-image">
@@ -23,6 +19,10 @@
             <div class="content">
                 {{ entry.content|safe }}
             </div>
+
+            {% if not entry.is_tech %}
+                <hr/>
+            {% endif %}
         {% endfor %}
     </article>
 {% endblock %}

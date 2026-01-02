@@ -48,7 +48,7 @@ def parse_post(filepath, lookups=None):
                     frontmatter[key.strip()] = value.strip()
 
     # Add <hr/> before second and subsequent timestamps
-    timestamp_pattern = r'(\[\[\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \(?A-Z\)?\]\])'
+    timestamp_pattern = r'(\[\[\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \(?[A-Z]{3}\)?\]\])'
     parts = re.split(timestamp_pattern, body)
     if len(parts) > 3:
         # parts[0] is text before 1st timestamp
