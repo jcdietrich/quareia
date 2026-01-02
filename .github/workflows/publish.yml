@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'upload/**'
   workflow_dispatch:
     inputs:
       force_rebuild:
