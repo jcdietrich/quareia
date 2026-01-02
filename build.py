@@ -64,7 +64,7 @@ def parse_post(filepath, lookups=None):
                     frontmatter[key.strip()] = val
 
     # Add <hr/> before second and subsequent timestamps and handle tags
-    timestamp_pattern = r'(\[\[\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \(?[A-Z]{3}\)?\]\])'
+    timestamp_pattern = r'(\[\[\s*\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \(?[A-Z]{3}\)?\s*\]\])'
     parts = re.split(timestamp_pattern, body)
     
     found_tags = []
@@ -110,7 +110,7 @@ def parse_post(filepath, lookups=None):
             content = parts[idx+1]
             
             # Check if timestamp is in the future
-            ts_match = re.search(r'\[\[(\d{4}/\d{2}/\d{2})', ts)
+            ts_match = re.search(r'\[\[\s*(\d{4}/\d{2}/\d{2})', ts)
             is_future_ts = False
             if ts_match:
                 ts_date_str = ts_match.group(1).replace('/', '-')
@@ -161,7 +161,7 @@ def parse_post(filepath, lookups=None):
     body = re.sub(r'(^(\s*[-*+]\s+|\s{2,}).*)\n(?=[^ \t\n\-\*\]])', r'\1\n\n', body, flags=re.MULTILINE)
 
     # Extract first timestamp for sorting
-    ts_match = re.search(r'\[\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})', body)
+    ts_match = re.search(r'\[\[\s*(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})', body)
     sort_key = ts_match.group(1) if ts_match else "9999/99/99 99:99:99"
 
     html_content = markdown.markdown(body, extensions=['extra'])

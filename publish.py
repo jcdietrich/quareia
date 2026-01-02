@@ -260,7 +260,7 @@ def process_image(image_path):
         response = client.models.generate_content(
             model='gemini-2.5-flash-lite',
             contents=[
-                "Transcribe the handwritten text in this image. This is a magickal journal entry. Rules: 1. Transcribe EXACTLY as written, including idiosyncratic spellings like 'candel', 'magick', 'sunrises'. 2. Format timestamps in double brackets as [[YYYY/MM/DD HH:MM:SS EST]] or [[YYYY/MM/DD HH:MM:SS EDT]]. Do NOT use parentheses around the timezone. Pay close attention to the time digits. 3. Do not add any conversational filler.", 
+                "Transcribe the handwritten text in this image. This is a magickal journal entry. Rules: 1. Transcribe EXACTLY as written, including idiosyncratic spellings like 'candel', 'magick', 'sunrises'. 2. Format timestamps in double brackets with spaces as [[ YYYY/MM/DD HH:MM:SS EST ]] or [[ YYYY/MM/DD HH:MM:SS EDT ]]. Pay close attention to the time digits. 3. Do not add any conversational filler.", 
                 img
             ]
         )
@@ -275,7 +275,7 @@ def process_image(image_path):
                     "Your goal is to correct any clear spelling errors (like typos or missing letters) while preserving the original context. "
                     "If a word is spelled correctly, or if it is an intentional variant common in magickal journals (like 'magick'), leave it as is. "
                     "Provide the corrected text directly. Do NOT use any special notation like {{OriginalWord}} to highlight changes. "
-                    "Preserve all formatting, including double brackets for timestamps [[YYYY/MM/DD HH:MM:SS TZ]] and any bullet points. "
+                    "Preserve all formatting, including double brackets with spaces for timestamps [[ YYYY/MM/DD HH:MM:SS TZ ]] and any bullet points. "
                     "Do not add any conversational filler. Only output the corrected text."
                 )
                 
@@ -297,7 +297,7 @@ def process_image(image_path):
     
     # Extract date from first timestamp
     post_date = datetime.date.today()
-    ts_match = re.search(r'\[\[(\d{4}/\d{2}/\d{2})', transcribed_text)
+    ts_match = re.search(r'\[\[\s*(\d{4}/\d{2}/\d{2})', transcribed_text)
     if ts_match:
         try:
             date_str = ts_match.group(1).replace('/', '-')
@@ -319,17 +319,17 @@ def process_image(image_path):
     processed_blocks = []
     current_block = []
     
-    # Regex to find [[YYYY/MM/DD ...]] - allowing optional leading bullet/space
-    ts_pattern = re.compile(r'^[*•-]?\s*\[\[(\d{4}/\d{2}/\d{2})')
+    # Regex to find [[ YYYY/MM/DD ... ]] - allowing optional leading bullet/space
+    ts_pattern = re.compile(r'^[*•-]?\s*\[\[\s*(\d{4}/\d{2}/\d{2})')
 
     def flush_block(block_lines):
         if not block_lines:
             return ""
         
-        # Split first line into [[Timestamp]] and trailing text
+        # Split first line into [[ Timestamp ]] and trailing text
         first_line = block_lines[0].strip()
         # Pattern to capture optional bullet, the timestamp, and then trailing text
-        ts_split_pattern = re.compile(r'^([*•-]?\s*)(\[\[\d{4}/\d{2}/\d{2}.*?\]\])(.*)')
+        ts_split_pattern = re.compile(r'^([*•-]?\s*)(\[\[\s*\d{4}/\d{2}/\d{2}.*?\s*\]\])(.*)')
         match = ts_split_pattern.match(first_line)
         
         if match:
