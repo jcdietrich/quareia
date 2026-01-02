@@ -3,6 +3,7 @@ import os
 import shutil
 import markdown
 import re
+import argparse
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 
@@ -22,6 +23,16 @@ def load_lookups():
                 if len(parts) == 2:
                     lookups[parts[0]] = parts[1]
     return lookups
+
+def slugify(value):
+    """
+    Normalizes string, converts to lowercase, removes non-alpha characters,
+    and converts spaces to hyphens.
+    """
+    import unicodedata
+    value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
+    value = re.sub(r'[^\w\s-]', '', value.lower())
+    return re.sub(r'[-\s]+', '-', value).strip('-')
 
 def parse_post(filepath, lookups=None):
     with open(filepath, 'r') as f:
@@ -45,21 +56,91 @@ def parse_post(filepath, lookups=None):
             for line in raw_fm.strip().split('\n'):
                 if ':' in line:
                     key, value = line.split(':', 1)
-                    frontmatter[key.strip()] = value.strip()
+                    val = value.strip()
+                    if val.lower() == 'true':
+                        val = True
+                    elif val.lower() == 'false':
+                        val = False
+                    frontmatter[key.strip()] = val
 
-    # Add <hr/> before second and subsequent timestamps
+    # Add <hr/> before second and subsequent timestamps and handle tags
     timestamp_pattern = r'(\[\[\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \(?[A-Z]{3}\)?\]\])'
     parts = re.split(timestamp_pattern, body)
-    if len(parts) > 3:
-        # parts[0] is text before 1st timestamp
-        # parts[1] is 1st timestamp
-        # parts[2] is text after 1st timestamp
-        new_body = parts[0] + parts[1] + "\n\n" + parts[2].lstrip('\n')
-        for i in range(3, len(parts), 2):
-            # parts[i] is the i-th timestamp
-            # parts[i+1] is text after it
-            new_body += "\n\n---\n\n" + parts[i] + "\n\n" + parts[i+1].lstrip('\n')
-        body = new_body
+    
+    found_tags = []
+    
+    def process_tags(text, extract=False):
+        extracted_html = ""
+        def replace_tag_match(match):
+            nonlocal extracted_html
+            raw_tags = match.group(1)
+            tags_list = [t.strip() for t in raw_tags.split(',')]
+            
+            html_list = "<ul>"
+            for tag in tags_list:
+                slug = slugify(tag)
+                found_tags.append({'name': tag, 'slug': slug})
+                html_list += f'<li><a href="tag_{slug}.html">{tag}</a></li>'
+            html_list += "</ul>"
+            
+            if extract:
+                extracted_html += html_list
+                return ""
+            else:
+                return html_list
+
+        new_text = re.sub(r'<<\s*(.*?)\s*>>', replace_tag_match, text)
+        return new_text, extracted_html
+
+    if len(parts) == 1:
+        # No timestamps found, process tags in-place
+        body, _ = process_tags(body, extract=False)
+    else:
+        new_body_parts = []
+        
+        # Preamble (before first timestamp) - process tags in-place
+        preamble, _ = process_tags(parts[0], extract=False)
+        new_body_parts.append(preamble)
+        
+        # Iterate over timestamp+content pairs
+        num_entries = (len(parts) - 1) // 2
+        for i in range(num_entries):
+            idx = 1 + i*2
+            ts = parts[idx]
+            content = parts[idx+1]
+            
+            # Check if timestamp is in the future
+            ts_match = re.search(r'\[\[(\d{4}/\d{2}/\d{2})', ts)
+            is_future_ts = False
+            if ts_match:
+                ts_date_str = ts_match.group(1).replace('/', '-')
+                ts_date = datetime.strptime(ts_date_str, "%Y-%m-%d").date()
+                if ts_date > datetime.now().date():
+                    is_future_ts = True
+            
+            css_class = ' class="future-warning"' if is_future_ts else ""
+            ts = f"<h3{css_class}>{ts}</h3>"
+
+            # Process tags in content, extracting them
+            cleaned_content, tag_markup = process_tags(content, extract=True)
+            
+            # Construct entry block: Timestamp + Tags + Content
+            # Ensure proper spacing
+            entry_block = f"{ts}\n\n{tag_markup}\n\n{cleaned_content.lstrip()}"
+            
+            # Add separator if not the first entry
+            if i > 0:
+                new_body_parts.append("\n\n---\n\n")
+            elif parts[0].strip():
+                 # If there was preamble text, we might want a separator or just newline?
+                 # Standard behavior was just concat.
+                 pass
+
+            new_body_parts.append(entry_block)
+            
+        body = "".join(new_body_parts)
+
+    # Process bullet point links
 
     # Process bullet point links
     if lookups:
@@ -77,7 +158,11 @@ def parse_post(filepath, lookups=None):
 
     # Ensure empty line after bullet points if followed by text
     # This prevents the next line from being swallowed into the list item
-    body = re.sub(r'(^(\s*[-*+]\s+|\s{2,}).*)\n(?=[^ \t\n\-\*\+])', r'\1\n\n', body, flags=re.MULTILINE)
+    body = re.sub(r'(^(\s*[-*+]\s+|\s{2,}).*)\n(?=[^ \t\n\-\*\]])', r'\1\n\n', body, flags=re.MULTILINE)
+
+    # Extract first timestamp for sorting
+    ts_match = re.search(r'\[\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})', body)
+    sort_key = ts_match.group(1) if ts_match else "9999/99/99 99:99:99"
 
     html_content = markdown.markdown(body, extensions=['extra'])
     
@@ -98,10 +183,38 @@ def parse_post(filepath, lookups=None):
         'metadata': frontmatter,
         'content': html_content,
         'filename': filename,
-        'url': filename.replace('.md', '.html')
+        'url': filename.replace('.md', '.html'),
+        'tags': found_tags,
+        'sort_key': sort_key
     }
 
-def build():
+def write_if_changed(path, content, force=False):
+    """
+    Writes content to path only if it differs from existing content (ignoring timestamp).
+    Returns True if written, False otherwise.
+    """
+    should_write = True
+    if not force and os.path.exists(path):
+        with open(path, 'r') as f:
+            current_content = f.read()
+        
+        # Normalize: Remove the dynamic timestamp for comparison
+        time_pattern = r'updated last: \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} EST'
+        
+        norm_new = re.sub(time_pattern, '', content)
+        norm_old = re.sub(time_pattern, '', current_content)
+        
+        if norm_new == norm_old:
+            should_write = False
+
+    if should_write:
+        with open(path, 'w') as f:
+            f.write(content)
+        print(f"Built {os.path.basename(path)}")
+    
+    return should_write
+
+def build(force=False):
     # Setup output directory
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
@@ -126,6 +239,8 @@ def build():
     env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
     post_template = env.get_template('post.html')
     index_template = env.get_template('index.html')
+    tags_template = env.get_template('tags.html')
+    tag_page_template = env.get_template('tag_page.html')
 
     # Check global dependencies (templates + build script)
     global_mtime = os.stat(__file__).st_mtime
@@ -135,6 +250,8 @@ def build():
             global_mtime = max(global_mtime, os.stat(t_path).st_mtime)
 
     posts_by_date = {}
+    all_tags = {}  # { 'slug': { 'name': 'Name', 'posts': [] } }
+    
     build_time = datetime.now().strftime('%Y/%m/%d %H:%M:%S EST')
     lookups = load_lookups()
     
@@ -151,36 +268,46 @@ def build():
             post = parse_post(filepath, lookups=lookups)
             date = post['metadata'].get('date')
             
+            # Aggregate tags
+            daily_url = f"{date}.html"
+            for tag in post['tags']:
+                if tag['slug'] not in all_tags:
+                    all_tags[tag['slug']] = {'name': tag['name'], 'slug': tag['slug'], 'posts': []}
+                
+                # Avoid duplicates per post if same tag appears multiple times
+                if not any(p['url'] == daily_url for p in all_tags[tag['slug']]['posts']):
+                    all_tags[tag['slug']]['posts'].append({
+                        'title': post['metadata'].get('title'),
+                        'date': date,
+                        'url': daily_url
+                    })
+
             if date not in posts_by_date:
                 posts_by_date[date] = {
                     'title': date,
                     'date': date,
                     'entries': [],
                     'url': f"{date}.html",
-                    'max_mtime': 0
+                    'max_mtime': 0,
+                    'has_future': False
                 }
             
             # Update max_mtime for this date group
             file_mtime = os.stat(filepath).st_mtime
             posts_by_date[date]['max_mtime'] = max(posts_by_date[date]['max_mtime'], file_mtime)
 
-            # Determine sort key
-            with open(filepath, 'r') as f:
-                raw_content = f.read()
-            
-            ts_match = re.search(r'\[\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})', raw_content)
-            if ts_match:
-                sort_key = ts_match.group(1)
-            else:
-                sort_key = "9999/99/99 99:99:99" 
-
             is_tech = file.endswith('-tech.md')
+            is_future = post['metadata'].get('future', False)
+            
+            if is_future:
+                posts_by_date[date]['has_future'] = True
             
             posts_by_date[date]['entries'].append({
                 'content': post['content'],
                 'image': post['metadata'].get('image'),
-                'sort_key': sort_key,
+                'sort_key': post['sort_key'],
                 'is_tech': is_tech,
+                'is_future': is_future,
                 'filename': file
             })
 
@@ -205,12 +332,13 @@ def build():
             'title': group['title'],
             'date': group['date'],
             'url': group['url'],
-            'image': first_image
+            'image': first_image,
+            'is_future': group['has_future']
         })
         
         # Incremental check
         needs_rebuild = True
-        if os.path.exists(output_path):
+        if not force and os.path.exists(output_path):
             output_mtime = os.stat(output_path).st_mtime
             # If output is newer than both global deps and source content -> skip
             if output_mtime > global_mtime and output_mtime > group['max_mtime']:
@@ -222,6 +350,7 @@ def build():
                 title=group['title'],
                 date=group['date'],
                 entries=group['entries'],
+                has_future=group['has_future'],
                 build_time=build_time
             )
             
@@ -236,32 +365,32 @@ def build():
     index_html = index_template.render(posts=index_posts, build_time=build_time)
     index_path = os.path.join(OUTPUT_DIR, 'index.html')
     
-    write_index = True
-    if os.path.exists(index_path):
-        with open(index_path, 'r') as f:
-            current_index_html = f.read()
-        
-        # Normalize: Remove the dynamic timestamp for comparison
-        # Pattern: updated last: YYYY/MM/DD HH:MM:SS EST
-        # We can be aggressive or specific. Specific is safer.
-        # The build_time format is '%Y/%m/%d %H:%M:%S EST'
-        # Regex: updated last: \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} EST
-        
-        time_pattern = r'updated last: \d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} EST'
-        
-        norm_new = re.sub(time_pattern, '', index_html)
-        norm_old = re.sub(time_pattern, '', current_index_html)
-        
-        if norm_new == norm_old:
-            write_index = False
-            # print("Skipped index.html (content up to date)")
-
-    if write_index:
-        with open(index_path, 'w') as f:
-            f.write(index_html)
-        print("Built index.html")
-        
+    write_if_changed(index_path, index_html, force)
     generated_files.add('index.html')
+
+    # Generate Tags Index
+    tags_list = sorted(all_tags.values(), key=lambda x: x['name'].lower())
+    tags_html = tags_template.render(tags=tags_list, build_time=build_time)
+    tags_path = os.path.join(OUTPUT_DIR, 'tags.html')
+    
+    write_if_changed(tags_path, tags_html, force)
+    generated_files.add('tags.html')
+
+    # Generate Individual Tag Pages
+    for slug, data in all_tags.items():
+        tag_filename = f"tag_{slug}.html"
+        tag_path = os.path.join(OUTPUT_DIR, tag_filename)
+        # Sort posts by date descending
+        sorted_posts = sorted(data['posts'], key=lambda x: x['date'], reverse=True)
+        
+        tag_page_html = tag_page_template.render(
+            tag_name=data['name'],
+            posts=sorted_posts,
+            build_time=build_time
+        )
+        
+        write_if_changed(tag_path, tag_page_html, force)
+        generated_files.add(tag_filename)
 
     # Cleanup stale files
     for f in os.listdir(OUTPUT_DIR):
@@ -272,4 +401,7 @@ def build():
     print(f"Site built in {OUTPUT_DIR}/")
 
 if __name__ == "__main__":
-    build()
+    parser = argparse.ArgumentParser(description='Build the site.')
+    parser.add_argument('-f', '--force', action='store_true', help='Force rebuild of all pages')
+    args = parser.parse_args()
+    build(force=args.force)

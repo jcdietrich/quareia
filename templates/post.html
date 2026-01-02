@@ -1,10 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title }} - jcdietrich magick logs{% endblock %}
+{% block title %}{{ title }} - jcdietrich: Quareia Journal{% endblock %}
 
 {% block content %}
     <article>
-      <h2 title="created on {{ date|replace('-', '/') }}">{{ title }}</h2>
+      <h2 title="created on {{ date|replace('-', '/') }}">
+          {{ title }}
+          {% if has_future %}
+          <span style="color: red; font-weight: bold; margin-left: 5px;" title="Warning: Contains future date">!</span>
+          {% endif %}
+      </h2>
         <p class="post-date">{{ date }}</p>
         
         {% for entry in entries %}

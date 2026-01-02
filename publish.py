@@ -182,6 +182,40 @@ def get_astro_data(date_str, lat=DEFAULT_LAT, lon=DEFAULT_LON):
         print(f"Error calculating astro data: {e}")
         return ""
 
+def optimize_image(source_path, dest_dir, filename_base):
+    """
+    Optimizes image: converts to WebP, resizes to max width 1600px.
+    Returns the new filename.
+    """
+    try:
+        with Image.open(source_path) as img:
+            # Fix orientation based on EXIF
+            from PIL import ImageOps
+            img = ImageOps.exif_transpose(img)
+
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            
+            max_width = 1600
+            if img.width > max_width:
+                ratio = max_width / img.width
+                new_height = int(img.height * ratio)
+                img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
+            new_filename = f"{filename_base}.webp"
+            dest_path = os.path.join(dest_dir, new_filename)
+            
+            img.save(dest_path, "WEBP", quality=80)
+            print(f"Image optimized and saved to {dest_path}")
+            return new_filename
+    except Exception as e:
+        print(f"Error optimizing image: {e}. Falling back to copy.")
+        base, ext = os.path.splitext(source_path)
+        new_filename = f"{filename_base}{ext}"
+        dest_path = os.path.join(dest_dir, new_filename)
+        shutil.copy2(source_path, dest_path)
+        return new_filename
+
 def process_image(image_path):
     print(f"Processing {image_path}...")
     
@@ -198,19 +232,22 @@ def process_image(image_path):
     # 1. Setup paths
     filename = os.path.basename(image_path)
     base_name, ext = os.path.splitext(filename)
-    today = datetime.date.today().isoformat()
     
     # Destination for image
     relative_img_dir = "static/images"
     dest_img_dir = os.path.join(os.getcwd(), relative_img_dir)
     os.makedirs(dest_img_dir, exist_ok=True)
     
-    dest_image_name = f"{today}-{filename}"
-    dest_image_path = os.path.join(dest_img_dir, dest_image_name)
+    # We will determine final image name after we get the date
+    # For now copy to temp or hold off? 
+    # Actually, the original logic copied it immediately using 'today'. 
+    # We should wait until we have the date from OCR to name the file correctly if we want YYYY-MM-DD-filename.
+    # But OCR needs the image. 
+    # Let's copy it to a temp name or just use the original name?
+    # The user instruction implies "use the date of the first timestamp for the entry" -> likely for the post date/filename.
+    # Does it apply to the image filename too? Probably consistency is good.
+    # Let's do OCR on the source path first.
     
-    shutil.copy2(image_path, dest_image_path)
-    print(f"Image saved to {dest_image_path}")
-
     # 2. Perform OCR with Gemini
     print("Initializing Gemini (google-genai) for OCR...")
     
@@ -257,6 +294,25 @@ def process_image(image_path):
     print("-" * 20)
     print(transcribed_text)
     print("-" * 20)
+    
+    # Extract date from first timestamp
+    post_date = datetime.date.today()
+    ts_match = re.search(r'\[\[(\d{4}/\d{2}/\d{2})', transcribed_text)
+    if ts_match:
+        try:
+            date_str = ts_match.group(1).replace('/', '-')
+            post_date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+            print(f"Detected date from timestamp: {post_date}")
+        except ValueError:
+            print("Error parsing date from timestamp, defaulting to today.")
+    
+    post_date_str = post_date.isoformat()
+    
+    # Now we can name the image and post
+    # dest_image_name = f"{post_date_str}-{filename}" # Old way
+    
+    dest_image_name = optimize_image(image_path, dest_img_dir, f"{post_date_str}-{base_name}")
+    dest_image_path = os.path.join(dest_img_dir, dest_image_name) # For reference if needed
 
     # 2.5 Parse Transcription and Insert Astro Data per Timestamp
     lines = transcribed_text.split('\n')
@@ -382,23 +438,30 @@ def process_image(image_path):
     posts_dir = os.path.join("content", "posts")
     os.makedirs(posts_dir, exist_ok=True)
     
-    post_filename = f"{today}-{base_name}.md"
+    post_filename = f"{post_date_str}-{base_name}.md"
     post_path = os.path.join(posts_dir, post_filename)
     
     # Check if file exists to avoid overwrite? Or just overwrite? 
     # We'll append timestamp if it exists to be safe.
     if os.path.exists(post_path):
         timestamp = datetime.datetime.now().strftime("%H%M%S")
-        post_filename = f"{today}-{base_name}-{timestamp}.md"
+        post_filename = f"{post_date_str}-{base_name}-{timestamp}.md"
         post_path = os.path.join(posts_dir, post_filename)
 
     # Image URL for HTML (relative to the site root)
     img_url = f"static/images/{dest_image_name}"
 
+    # Check for future date (using the extracted post_date)
+    is_future = False
+    if post_date > datetime.date.today():
+        is_future = True
+        print(f"Warning: Extracted date {post_date} is in the future!")
+
     markdown_content = f"""
 ---
-date: {today}
+date: {post_date_str}
 image: {img_url}
+future: {str(is_future).lower()}
 ---
 
 {final_body}
