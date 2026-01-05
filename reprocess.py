@@ -271,7 +271,8 @@ if __name__ == "__main__":
     parser.add_argument('image_path', nargs='?', help='Path to the source image to OCR (optional if --all is used)')
     parser.add_argument('-a', '--all', action='store_true', help='Reprocess ALL posts in content/posts/')
     parser.add_argument('-d', '--date', help='Reprocess all posts from this date forward (inclusive). Format: YYYY-MM-DD.')
-    parser.add_argument('-l', '--list-models', action='store_true', help='List available models and exit.')
+    parser.add_argument('-l', '--latest', action='store_true', help='Reprocess only the latest post.')
+    parser.add_argument('--list-models', action='store_true', help='List available models and exit.')
     parser.add_argument('-m', '--model', help='Start with this model, skipping those before it in the list.')
     
     args = parser.parse_args()
@@ -302,7 +303,7 @@ if __name__ == "__main__":
             print("Error: Date format must be YYYY-MM-DD")
             sys.exit(1)
 
-    if args.all or args.date:
+    if args.all or args.date or args.latest:
         posts_dir = 'content/posts'
         if not os.path.exists(posts_dir):
             print(f"Error: {posts_dir} does not exist.")
@@ -311,7 +312,14 @@ if __name__ == "__main__":
         md_files = glob.glob(os.path.join(posts_dir, '*.md'))
         md_files.sort() # Sort by filename (date)
         
-        print(f"Found {len(md_files)} posts total.")
+        if args.latest and md_files:
+            md_files = [md_files[-1]]
+            print(f"Found latest post: {md_files[0]}")
+        elif args.latest:
+            print("No posts found to reprocess.")
+            sys.exit(0)
+
+        print(f"Found {len(md_files)} posts to process.")
         
         count = 0
         for post_file in md_files:
@@ -342,7 +350,8 @@ if __name__ == "__main__":
                         print(f"\n--- Reprocessing {post_file} ---")
                         reprocess(post_file, img_rel_path, models=models, failed_models=failed_models)
                         # Sleep to avoid rate limits (2 calls per reprocess)
-                        time.sleep(10)
+                        if len(md_files) > 1:
+                            time.sleep(10)
                     else:
                         print(f"Warning: Image {img_rel_path} not found for {post_file}, skipping.")
                 else:
@@ -355,6 +364,6 @@ if __name__ == "__main__":
                 
     else:
         if not args.post_path or not args.image_path:
-            parser.error("post_path and image_path are required unless --all or --date is specified.")
+            parser.error("post_path and image_path are required unless --all, --date, or --latest is specified.")
         
         reprocess(args.post_path, args.image_path, models=models, failed_models=failed_models)
