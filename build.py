@@ -284,6 +284,10 @@ def build(force=False):
                 if not os.path.exists(dest_file) or os.stat(src_file).st_mtime > os.stat(dest_file).st_mtime:
                     shutil.copy2(src_file, dest_file)
 
+    # Copy favicon.ico if it exists
+    if os.path.exists('favicon.ico'):
+        shutil.copy2('favicon.ico', os.path.join(OUTPUT_DIR, 'favicon.ico'))
+
     # Setup Jinja2
     env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
     post_template = env.get_template('post.html')
