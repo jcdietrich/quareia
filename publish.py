@@ -228,13 +228,11 @@ def get_astro_data(date_str, lat=DEFAULT_LAT, lon=DEFAULT_LON):
         phase_illum = moon.phase 
         phase_str = f"{phase_illum:.1f}%"
         
-        return f"""
-  * Sunrise: {sun_rise or "N/A"}
+        return f"""  * Sunrise: {sun_rise or "N/A"}
   * Sunset: {sun_set or "N/A"}
   * Moonrise: {moon_rise or "N/A"}
   * Moonset: {moon_set or "N/A"}
-  * Moon phase: {phase_str}
-"""
+  * Moon phase: {phase_str}"""
     except Exception as e:
         print(f"Error calculating astro data: {e}")
         return ""
@@ -457,7 +455,7 @@ def process_image(image_path, models=None, failed_models=None):
                 temp, condition = get_weather_data(dt, lat, lon)
                 weather_block = f"  * Location: {loc_name}\n  * Temperature: {temp}\n  * Weather Condition: {condition}\n"
 
-            astro_data = get_astro_data(date_str, lat, lon).strip()
+            astro_data = get_astro_data(date_str, lat, lon)
             
             # Combine
             meta_data = f"{weather_block}{astro_data}\n  * Day of Week: {day_of_week}"

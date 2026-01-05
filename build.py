@@ -131,15 +131,18 @@ def parse_post(filepath, lookups=None):
                 ts_date_str = ts_match.group(1).replace('/', '-').replace(' ', '-')
                 ts_date = datetime.strptime(ts_date_str, "%Y-%m-%d").date()
             
-            css_class = ' class="future-warning"' if is_future_ts else ""
-            ts = f"<h3{css_class}>{ts}</h3>"
-
-            # Process tags in content, extracting them
-            cleaned_content, tag_markup = process_tags(entry_content, extract=True)
+            classes = ["timestamp-header"]
+            if is_future_ts:
+                classes.append("future-warning")
             
-            # Construct entry block: Timestamp + Tags + Content
+            ts = f'<h3 class="{" ".join(classes)}">{ts}</h3>'
+
+            # Process tags in content, replacing them in-place
+            cleaned_content, _ = process_tags(entry_content, extract=False)
+            
+            # Construct entry block: Timestamp + Content (with in-place tags)
             # Ensure proper spacing
-            entry_block = f"{ts}\n\n{tag_markup}\n\n{cleaned_content.lstrip()}"
+            entry_block = f"{ts}\n\n{cleaned_content.lstrip()}"
             
             # Add separator if not the first entry
             if i > 0:
@@ -172,6 +175,33 @@ def parse_post(filepath, lookups=None):
     # Ensure empty line after bullet points if followed by text
     # This prevents the next line from being swallowed into the list item
     body = re.sub(r'(^(\s*[-*+]\s+|\s{2,}).*)\n(?=[^ \t\n\-\*\]])', r'\1\n\n', body, flags=re.MULTILINE)
+
+    # Start a new list if bullet indicator changes (*, -, +)
+    def bullet_breaker(match):
+        b1 = match.group(2).strip()
+        b2 = match.group(4).strip()
+        if b1 != b2:
+            return match.group(1) + "\n\n"
+        return match.group(1) + "\n"
+
+    body = re.sub(r'(^(\s*[-*+])\s+.*)\n(?=(\s*([-*+])\s+.*))', bullet_breaker, body, flags=re.MULTILINE)
+
+    # Wrap Astro data list in a div for specific styling
+    def wrap_astro_data(text):
+        # Regex to find a block of list items
+        # Matches continuous lines starting with a bullet
+        list_block_pattern = re.compile(r'((?:^[ \t]*[*•-].*?(?:\n|$))+)', re.MULTILINE)
+        
+        def check_and_wrap(match):
+            block = match.group(1)
+            # Check for Astro keywords
+            if re.search(r'(Location:|Sunrise:|Moon phase:)', block):
+                return f'<div class="astro-data" markdown="1">\n\n{block}\n</div>\n'
+            return block
+
+        return list_block_pattern.sub(check_and_wrap, text)
+
+    body = wrap_astro_data(body)
 
     # Extract first timestamp for sorting
     ts_match = re.search(r'\[\[\s*(\d{4}[/ ]\d{2}[/ ]\d{2}[ T]\d{2}:\d{2}:\d{2})', body)

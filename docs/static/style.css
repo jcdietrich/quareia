@@ -39,6 +39,25 @@ h3 {
     font-style: normal;
 }
 
+/* Pentagram bullets for Astro list following timestamp headers */
+.astro-data ul {
+    list-style-type: none;
+    padding-left: 1.2em;
+}
+
+.astro-data ul > li {
+    position: relative;
+}
+
+.astro-data ul > li::before {
+    content: "⚝";
+    position: absolute;
+    left: -1.2em;
+    color: #d4af37;
+    font-size: 1.2em;
+    line-height: 1.2;
+}
+
 a {
     color: #e0c068; /* Slightly lighter gold for links */
 }
