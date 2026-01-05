@@ -1,12 +1,15 @@
-#!/usr/bin/env python3
+#!/venv/bin/python3
 import sys
 import os
 import shutil
 import datetime
 import math
 import re
+import time
 import requests
+import argparse
 from google import genai
+from google.genai import errors
 from PIL import Image
 import build
 import ephem
@@ -16,6 +19,60 @@ DEFAULT_LAT = '43.4254'
 DEFAULT_LON = '-80.5112'
 DEFAULT_ELEVATION = 300 # Approx for Kitchener
 DEFAULT_LOCATION_NAME = "Kitchener, ON, Canada"
+
+DEFAULT_MODELS = [
+    'gemini-3-pro', 'gemini-3-pro-preview', 
+    'gemini-3-flash', 'gemini-3-flash-preview', 
+    'gemini-2.5-pro', 'gemini-2.5-flash', 
+    'gemini-2.0-flash', 'gemini-2.5-flash-lite-preview-02-05', 
+    'gemini-1.5-flash'
+]
+
+def generate_content_with_retry(client, models, contents, retries=1, failed_models=None):
+    if isinstance(models, str):
+        models = [models]
+        
+    for model in models:
+        if failed_models and model in failed_models:
+            print(f"Skipping known failed model: {model}")
+            continue
+
+        print(f"Trying model: {model}")
+        for attempt in range(retries + 1):
+            try:
+                return client.models.generate_content(model=model, contents=contents)
+            except errors.ClientError as e:
+                if e.code == 429:
+                    print(f"429 Resource Exhausted. Attempt {attempt + 1}/{retries + 1}")
+                    delay = 60 # Default to 60s
+                    
+                    match = re.search(r'retry in (\d+(\.\d+)?)s', str(e))
+                    if match:
+                        delay = float(match.group(1)) + 2
+                    
+                    print(f"Sleeping for {delay:.2f}s before retrying...")
+                    time.sleep(delay)
+                    
+                    if attempt == retries:
+                        print(f"Max retries reached for model {model}.")
+                        if failed_models is not None:
+                            failed_models.add(model)
+                        
+                        if model == models[-1]:
+                            print("All models failed.")
+                            raise
+                        else:
+                            print("Switching to next model...")
+                elif e.code == 404:
+                    print(f"Model {model} not found (404). Skipping to next model.")
+                    if failed_models is not None:
+                        failed_models.add(model)
+                    break
+                else:
+                    print(f"ClientError {e.code} with model {model}: {e}. Skipping to next model.")
+                    if failed_models is not None:
+                        failed_models.add(model)
+                    break
 
 def get_coordinates_from_name(place_name):
     """
@@ -216,7 +273,10 @@ def optimize_image(source_path, dest_dir, filename_base):
         shutil.copy2(source_path, dest_path)
         return new_filename
 
-def process_image(image_path):
+def process_image(image_path, models=None, failed_models=None):
+    if models is None:
+        models = DEFAULT_MODELS
+        
     print(f"Processing {image_path}...")
     
     if not os.path.exists(image_path):
@@ -257,12 +317,14 @@ def process_image(image_path):
         print("Reading text from image...")
         img = Image.open(image_path)
         
-        response = client.models.generate_content(
-            model='gemini-2.5-flash-lite',
+        response = generate_content_with_retry(
+            client=client,
+            models=models,
             contents=[
-                "Transcribe the handwritten text in this image. This is a magickal journal entry. Rules: 1. Transcribe EXACTLY as written, including idiosyncratic spellings like 'candel', 'magick', 'sunrises'. 2. Format timestamps in double brackets with spaces as [[ YYYY/MM/DD HH:MM:SS EST ]] or [[ YYYY/MM/DD HH:MM:SS EDT ]]. Pay close attention to the time digits. 3. Do not add any conversational filler.", 
+                "Transcribe the handwritten text in this image. This is a magickal journal entry. Rules: 1. Transcribe EXACTLY as written, including idiosyncratic spellings like 'candel', 'magick', 'sunrises'. 2. Format timestamps in double brackets with exactly one space after [[ and before ]], like this: [[ YYYY/MM/DD HH:MM:SS EST ]]. Pay close attention to the time digits. If you see a 'T' between the date and time, ignore it and use a space. 3. Do not add any conversational filler. 4. If you see text in double quotes like \"\"TITLE\"\", remove the quotes and place the TITLE text immediately before the timestamp on the same line, like: TITLE [[ YYYY/... ]].", 
                 img
-            ]
+            ],
+            failed_models=failed_models
         )
         transcribed_text = response.text.strip()
         
@@ -275,13 +337,15 @@ def process_image(image_path):
                     "Your goal is to correct any clear spelling errors (like typos or missing letters) while preserving the original context. "
                     "If a word is spelled correctly, or if it is an intentional variant common in magickal journals (like 'magick'), leave it as is. "
                     "Provide the corrected text directly. Do NOT use any special notation like {{OriginalWord}} to highlight changes. "
-                    "Preserve all formatting, including double brackets with spaces for timestamps [[ YYYY/MM/DD HH:MM:SS TZ ]] and any bullet points. "
+                    "Preserve all formatting, including timestamps which MUST be in the format [[ YYYY/MM/DD HH:MM:SS TZ ]] (with exactly one space after [[ and before ]]) and any bullet points. "
                     "Do not add any conversational filler. Only output the corrected text."
                 )
                 
-                spell_check_response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=[spell_check_prompt, transcribed_text]
+                spell_check_response = generate_content_with_retry(
+                    client=client,
+                    models=models,
+                    contents=[spell_check_prompt, transcribed_text],
+                    failed_models=failed_models
                 )
                 transcribed_text = spell_check_response.text.strip()
             except Exception as e:
@@ -320,7 +384,8 @@ def process_image(image_path):
     current_block = []
     
     # Regex to find [[ YYYY/MM/DD ... ]] - allowing optional leading bullet/space
-    ts_pattern = re.compile(r'^[*•-]?\s*\[\[\s*(\d{4}/\d{2}/\d{2})')
+    # Also support space delimiters in date YYYY MM DD
+    ts_pattern = re.compile(r'.*?\[\[\s*(\d{4}[/ ]\d{2}[/ ]\d{2})')
 
     def flush_block(block_lines):
         if not block_lines:
@@ -328,14 +393,26 @@ def process_image(image_path):
         
         # Split first line into [[ Timestamp ]] and trailing text
         first_line = block_lines[0].strip()
-        # Pattern to capture optional bullet, the timestamp, and then trailing text
-        ts_split_pattern = re.compile(r'^([*•-]?\s*)(\[\[\s*\d{4}/\d{2}/\d{2}.*?\s*\]\])(.*)')
+        # Pattern to capture optional prefix/bullet, the timestamp (flexible), and then trailing text
+        ts_split_pattern = re.compile(r'^(.*?)(\[\[\s*\d{4}[/ ]\d{2}[/ ]\d{2}.*?\s*\]\])(.*)')
         match = ts_split_pattern.match(first_line)
         
         if match:
+            prefix = match.group(1)
             ts_full = match.group(2)
-            date_captured = re.search(r'(\d{4}/\d{2}/\d{2})', ts_full).group(1)
-            date_str = date_captured.replace('/', '-')
+            
+            # Extract date
+            date_captured_match = re.search(r'(\d{4})[/ ](\d{2})[/ ](\d{2})', ts_full)
+            if date_captured_match:
+                y, m, d = int(date_captured_match.group(1)), int(date_captured_match.group(2)), int(date_captured_match.group(3))
+                date_obj = datetime.date(y, m, d)
+                date_str = date_obj.isoformat()
+                day_of_week = date_obj.strftime('%A')
+            else:
+                date_obj = datetime.date.today()
+                date_str = date_obj.isoformat()
+                day_of_week = date_obj.strftime('%A')
+
             trailing_text = match.group(3).strip()
             
             # Defaults
@@ -383,7 +460,7 @@ def process_image(image_path):
             astro_data = get_astro_data(date_str, lat, lon).strip()
             
             # Combine
-            meta_data = f"{weather_block}{astro_data}"
+            meta_data = f"{weather_block}{astro_data}\n  * Day of Week: {day_of_week}"
             
             bullets = []
             remainder = []
@@ -412,7 +489,7 @@ def process_image(image_path):
                 list_content += "\n".join("  " + b for b in bullets)
             
             # Ensure blank line between timestamp and list
-            final_section = f"{ts_full}\n\n{list_content.strip()}"
+            final_section = f"{prefix}{ts_full}\n\n{list_content.strip()}"
             
             if remainder:
                 final_section += "\n\n" + "\n".join(remainder)
@@ -465,7 +542,6 @@ future: {str(is_future).lower()}
 ---
 
 {final_body}
-
 """
     
     with open(post_path, 'w') as f:
@@ -478,9 +554,30 @@ future: {str(is_future).lower()}
     build.build()
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python publish.py <path_to_image>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Publish a new journal entry from an image.")
+    parser.add_argument("image_path", nargs="?", help="Path to the image to process.")
+    parser.add_argument("-l", "--list-models", action="store_true", help="List available models and exit.")
+    parser.add_argument("-m", "--model", help="Start with this model, skipping those before it in the list.")
     
-    image_path = sys.argv[1]
-    process_image(image_path)
+    args = parser.parse_args()
+    
+    if args.list_models:
+        print("Available models:")
+        for model in DEFAULT_MODELS:
+            print(f"  - {model}")
+        sys.exit(0)
+        
+    if not args.image_path:
+        parser.error("image_path is required unless --list-models is specified.")
+    
+    models = DEFAULT_MODELS
+    if args.model:
+        if args.model in models:
+            idx = models.index(args.model)
+            models = models[idx:]
+            print(f"Starting with model: {args.model}")
+        else:
+            print(f"Warning: Model '{args.model}' not found in default list. Using it as a custom single model.")
+            models = [args.model]
+
+    process_image(args.image_path, models=models)

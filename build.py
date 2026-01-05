@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!venv/bin/python3
 import os
 import shutil
 import markdown
@@ -64,7 +64,8 @@ def parse_post(filepath, lookups=None):
                     frontmatter[key.strip()] = val
 
     # Add <hr/> before second and subsequent timestamps and handle tags
-    timestamp_pattern = r'(\[\[\s*\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \(?[A-Z]{3}\)?\s*\]\])'
+    # Allow optional 'T' between date and time
+    timestamp_pattern = r'((?:.*?)\s*\[\[\s*\d{4}[/ ]\d{2}[/ ]\d{2}[ T]\d{2}:\d{2}:\d{2} \(?[A-Z]{3}\)?\s*\]\])'
     parts = re.split(timestamp_pattern, body)
     
     found_tags = []
@@ -110,13 +111,11 @@ def parse_post(filepath, lookups=None):
             content = parts[idx+1]
             
             # Check if timestamp is in the future
-            ts_match = re.search(r'\[\[\s*(\d{4}/\d{2}/\d{2})', ts)
+            ts_match = re.search(r'\[\[\s*(\d{4}[/ ]\d{2}[/ ]\d{2})', ts)
             is_future_ts = False
             if ts_match:
-                ts_date_str = ts_match.group(1).replace('/', '-')
+                ts_date_str = ts_match.group(1).replace('/', '-').replace(' ', '-')
                 ts_date = datetime.strptime(ts_date_str, "%Y-%m-%d").date()
-                if ts_date > datetime.now().date():
-                    is_future_ts = True
             
             css_class = ' class="future-warning"' if is_future_ts else ""
             ts = f"<h3{css_class}>{ts}</h3>"
@@ -161,8 +160,13 @@ def parse_post(filepath, lookups=None):
     body = re.sub(r'(^(\s*[-*+]\s+|\s{2,}).*)\n(?=[^ \t\n\-\*\]])', r'\1\n\n', body, flags=re.MULTILINE)
 
     # Extract first timestamp for sorting
-    ts_match = re.search(r'\[\[\s*(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})', body)
+    ts_match = re.search(r'\[\[\s*(\d{4}[/ ]\d{2}[/ ]\d{2}[ T]\d{2}:\d{2}:\d{2})', body)
     sort_key = ts_match.group(1) if ts_match else "9999/99/99 99:99:99"
+    # Normalize sort key to have slashes and single space
+    if ts_match:
+        sort_key = sort_key.replace(' ', '/').replace('T', '/') # Normalize all to same separator for string sort
+        # Wait, if I replace space with slash it becomes YYYY/MM/DD/HH:MM:SS
+        # This works for sorting.
 
     html_content = markdown.markdown(body, extensions=['extra'])
     
