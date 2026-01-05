@@ -111,3 +111,37 @@ footer a {
     background-color: #d4af37;
     color: #2e1a47;
 }
+
+details.source-code {
+    margin-top: 20px;
+    background-color: #3a2a55;
+    border-radius: 5px;
+    padding: 5px 10px;
+}
+
+details.source-code summary {
+    cursor: pointer;
+    color: #a0a0a0;
+    font-size: 0.8em;
+    font-family: sans-serif;
+    outline: none;
+}
+
+details.source-code summary:hover {
+    color: #d4af37;
+}
+
+details.source-code pre {
+    background-color: #1e1133;
+    padding: 10px;
+    border-radius: 5px;
+    overflow-x: auto;
+    margin-top: 10px;
+    border: 1px solid #4a3b69;
+}
+
+details.source-code code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.8em;
+    color: #e0e0e0;
+}

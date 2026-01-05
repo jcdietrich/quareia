@@ -25,6 +25,11 @@
                 {{ entry.content|safe }}
             </div>
 
+            <details class="source-code">
+                <summary>View Source ({{ entry.filename }})</summary>
+                <pre><code>{{ entry.raw_content }}</code></pre>
+            </details>
+
             {% if not entry.is_tech %}
                 <hr/>
             {% endif %}

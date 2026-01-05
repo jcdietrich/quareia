@@ -270,6 +270,7 @@ if __name__ == "__main__":
     parser.add_argument('post_path', nargs='?', help='Path to the existing markdown post to update (optional if --all is used)')
     parser.add_argument('image_path', nargs='?', help='Path to the source image to OCR (optional if --all is used)')
     parser.add_argument('-a', '--all', action='store_true', help='Reprocess ALL posts in content/posts/')
+    parser.add_argument('-d', '--date', help='Reprocess all posts from this date forward (inclusive). Format: YYYY-MM-DD.')
     parser.add_argument('-l', '--list-models', action='store_true', help='List available models and exit.')
     parser.add_argument('-m', '--model', help='Start with this model, skipping those before it in the list.')
     
@@ -293,16 +294,39 @@ if __name__ == "__main__":
     
     failed_models = set()
 
-    if args.all:
+    target_date = None
+    if args.date:
+        try:
+            target_date = datetime.datetime.strptime(args.date, "%Y-%m-%d").date()
+        except ValueError:
+            print("Error: Date format must be YYYY-MM-DD")
+            sys.exit(1)
+
+    if args.all or args.date:
         posts_dir = 'content/posts'
         if not os.path.exists(posts_dir):
             print(f"Error: {posts_dir} does not exist.")
             sys.exit(1)
             
         md_files = glob.glob(os.path.join(posts_dir, '*.md'))
-        print(f"Found {len(md_files)} posts to reprocess.")
+        md_files.sort() # Sort by filename (date)
         
+        print(f"Found {len(md_files)} posts total.")
+        
+        count = 0
         for post_file in md_files:
+            if target_date:
+                filename = os.path.basename(post_file)
+                match = re.match(r'^(\d{4}-\d{2}-\d{2})', filename)
+                if match:
+                    file_date = datetime.datetime.strptime(match.group(1), "%Y-%m-%d").date()
+                    if file_date < target_date:
+                        continue
+                else:
+                    # If date filtering is on, skip files without date
+                    continue
+            
+            count += 1
             # We need to find the image path from the post content
             try:
                 with open(post_file, 'r') as f:
@@ -325,9 +349,12 @@ if __name__ == "__main__":
                     print(f"Warning: No image found in frontmatter for {post_file}, skipping.")
             except Exception as e:
                 print(f"Error processing {post_file}: {e}")
+        
+        if count == 0 and args.date:
+            print(f"No posts found from {args.date} onwards.")
                 
     else:
         if not args.post_path or not args.image_path:
-            parser.error("post_path and image_path are required unless --all is specified.")
+            parser.error("post_path and image_path are required unless --all or --date is specified.")
         
         reprocess(args.post_path, args.image_path, models=models, failed_models=failed_models)

@@ -65,7 +65,9 @@ def parse_post(filepath, lookups=None):
 
     # Add <hr/> before second and subsequent timestamps and handle tags
     # Allow optional 'T' between date and time
-    timestamp_pattern = r'((?:.*?)\s*\[\[\s*\d{4}[/ ]\d{2}[/ ]\d{2}[ T]\d{2}:\d{2}:\d{2} \(?[A-Z]{3}\)?\s*\]\])'
+    # Use stricter regex to avoid swallowing preceding text lines, but allow text on the SAME line (like NOTES [[...]])
+    # Also support time formats like HHMM (4 digits) or HH:MM
+    timestamp_pattern = r'((?:^|\n).*?\[\[\s*\d{4}[/ ]\d{2}[/ ]\d{2}[ T](?:\d{2}:\d{2}:\d{2}|\d{2}:\d{2}|\d{4}) \(?[A-Z]{3}\)?\s*\]\])'
     parts = re.split(timestamp_pattern, body)
     
     found_tags = []
@@ -107,8 +109,20 @@ def parse_post(filepath, lookups=None):
         num_entries = (len(parts) - 1) // 2
         for i in range(num_entries):
             idx = 1 + i*2
-            ts = parts[idx]
-            content = parts[idx+1]
+            ts_raw = parts[idx].strip()
+            entry_content = parts[idx+1]
+            
+            # Split into Title and Timestamp if title exists
+            header_split_match = re.match(r'^(.*?)(\[\[.*?\]\])$', ts_raw, re.DOTALL)
+            if header_split_match:
+                title_part = header_split_match.group(1).strip()
+                ts_part = header_split_match.group(2).strip()
+                if title_part:
+                    ts = f"{title_part}<br/>{ts_part}"
+                else:
+                    ts = ts_part
+            else:
+                ts = ts_raw
             
             # Check if timestamp is in the future
             ts_match = re.search(r'\[\[\s*(\d{4}[/ ]\d{2}[/ ]\d{2})', ts)
@@ -121,7 +135,7 @@ def parse_post(filepath, lookups=None):
             ts = f"<h3{css_class}>{ts}</h3>"
 
             # Process tags in content, extracting them
-            cleaned_content, tag_markup = process_tags(content, extract=True)
+            cleaned_content, tag_markup = process_tags(entry_content, extract=True)
             
             # Construct entry block: Timestamp + Tags + Content
             # Ensure proper spacing
@@ -189,7 +203,8 @@ def parse_post(filepath, lookups=None):
         'filename': filename,
         'url': filename.replace('.md', '.html'),
         'tags': found_tags,
-        'sort_key': sort_key
+        'sort_key': sort_key,
+        'raw_content': content
     }
 
 def write_if_changed(path, content, force=False):
@@ -312,7 +327,8 @@ def build(force=False):
                 'sort_key': post['sort_key'],
                 'is_tech': is_tech,
                 'is_future': is_future,
-                'filename': file
+                'filename': file,
+                'raw_content': post['raw_content']
             })
 
     # Render pages and prepare index
