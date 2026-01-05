@@ -168,7 +168,7 @@ def reprocess(post_path, image_path, models=None, failed_models=None):
                 temp, condition = publish.get_weather_data(dt, lat, lon)
                 weather_block = f"  * Location: {loc_name}\n  * Temperature: {temp}\n  * Weather Condition: {condition}\n"
 
-            astro_data = publish.get_astro_data(date_str, lat, lon)
+            astro_data = publish.get_astro_data(date_str, lat, lon).strip()
             # Insert Day of Week
             meta_data = f"{weather_block}{astro_data}\n  * Day of Week: {day_of_week}"
             

@@ -79,7 +79,7 @@ def parse_post(filepath, lookups=None):
             raw_tags = match.group(1)
             tags_list = [t.strip() for t in raw_tags.split(',')]
             
-            html_list = "<ul>"
+            html_list = '<ul class="entry-tags">'
             for tag in tags_list:
                 slug = slugify(tag)
                 found_tags.append({'name': tag, 'slug': slug})
@@ -96,8 +96,13 @@ def parse_post(filepath, lookups=None):
         return new_text, extracted_html
 
     if len(parts) == 1:
-        # No timestamps found, process tags in-place
-        body, _ = process_tags(body, extract=False)
+        # No timestamps found, process tags
+        body, tag_markup = process_tags(body, extract=True)
+        if not tag_markup:
+            slug = slugify("LOG")
+            found_tags.append({'name': "LOG", 'slug': slug})
+            tag_markup = f'<ul class="entry-tags"><li><a href="tag_{slug}.html">LOG</a></li></ul>'
+        body = body.strip() + "\n\n" + tag_markup
     else:
         new_body_parts = []
         
@@ -135,14 +140,20 @@ def parse_post(filepath, lookups=None):
             if is_future_ts:
                 classes.append("future-warning")
             
-            ts = f'<h3 class="{" ".join(classes)}">{ts}</h3>'
+            ts_html = f'<h3 class="{" ".join(classes)}">{ts}</h3>'
 
-            # Process tags in content, replacing them in-place
-            cleaned_content, _ = process_tags(entry_content, extract=False)
+            # Process tags in content, extracting them
+            cleaned_content, tag_markup = process_tags(entry_content, extract=True)
             
-            # Construct entry block: Timestamp + Content (with in-place tags)
+            # Default "LOG" tag if none found
+            if not tag_markup:
+                slug = slugify("LOG")
+                found_tags.append({'name': "LOG", 'slug': slug})
+                tag_markup = f'<ul class="entry-tags"><li><a href="tag_{slug}.html">LOG</a></li></ul>'
+            
+            # Construct entry block: Timestamp + Content + Tags at the end
             # Ensure proper spacing
-            entry_block = f"{ts}\n\n{cleaned_content.lstrip()}"
+            entry_block = f"{ts_html}\n\n{cleaned_content.strip()}\n\n{tag_markup}"
             
             # Add separator if not the first entry
             if i > 0:

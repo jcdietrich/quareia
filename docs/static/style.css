@@ -131,6 +131,31 @@ footer a {
     color: #2e1a47;
 }
 
+ul.entry-tags {
+    font-size: 0.5em;
+    list-style-type: none;
+    padding: 0;
+    margin: 10px 0;
+}
+
+ul.entry-tags li {
+    display: inline-block;
+    margin-right: 8px;
+}
+
+ul.entry-tags a {
+    background-color: #4a3b69;
+    padding: 1px 4px;
+    border-radius: 3px;
+    text-decoration: none;
+    color: #d3d3d3;
+}
+
+ul.entry-tags a:hover {
+    background-color: #d4af37;
+    color: #2e1a47;
+}
+
 details.source-code {
     margin-top: 20px;
     background-color: #3a2a55;
