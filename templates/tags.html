@@ -6,7 +6,7 @@
     <h2>Tags</h2>
     <ul>
     {% for tag in tags %}
-        <li><a href="tag_{{ tag.slug }}.html">{{ tag.name }}</a></li>
+        <li><a href="tag_{{ tag.slug }}.html">{{ tag.name }}</a> ({{ tag.posts|length }})</li>
     {% endfor %}
     </ul>
 {% endblock %}
